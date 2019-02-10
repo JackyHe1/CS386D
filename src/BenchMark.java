@@ -9,16 +9,11 @@ public class BenchMark {
         String tableName = "benchmark";
         DAO dao = new DAO();
         dao.init();
-        dao.createTable(tableName);
+        dao.generateData(size);
 
-        dao.insertAllData(size, true);  //true indicate that primary key sorted when insert
-        System.out.println("sorted primary key:");
-        dao.queryBySecondIdx("columnA", "columnB");
+        dao.loadDataAndQuery(tableName,"columnA", "columnB", true);
 
-        dao.clearTable(tableName);                        //need to clear table because we need to insert value again
-        dao.insertAllData(size, false);
-        System.out.println("unsorted primary key:");
-        dao.queryBySecondIdx("columnA", "columnB");
+        dao.loadDataAndQuery(tableName,"columnA", "columnB", false);
     }
 
 }

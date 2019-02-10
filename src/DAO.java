@@ -12,8 +12,10 @@ public class DAO{
     private final String username = "postgres";
     private final String password = "0807";
     private String tableName = "";  //init using call create table function
+    private List<int[]> data = new ArrayList<int[]>();
     private final int insertSize = 10000;
-    private final int querySize = 10;
+    private final int querySize = 100;
+    private int dataSize = 0;
     Random rnd = new Random();
 
     private long query1Time = 0;
@@ -88,8 +90,33 @@ public class DAO{
         }
     }
 
+    public void dropTable(String tableName) {
+        try {
+            Statement stmt = null;
+            stmt = conn.createStatement();
+            String  sql = "DROP TABLE " + tableName;
+            stmt.executeUpdate(sql);
+            System.out.println("drop table " + tableName + " successfully...");
+        } catch (SQLException sqle) {
+            System.out.println("Could not delete table");
+            sqle.printStackTrace();
+        }
+    }
+
     void variation2() {
         //generate index randomly, and then insert bunch of tuples
+    }
+
+    void generateData(int size) {
+        data = new ArrayList<int[]>();
+        for (int key = 1; key <= size; key++) {
+            int[] tuple = new int[3];
+            tuple[0] = key;
+            tuple[1] = rnd.nextInt(50000) + 1;
+            tuple[2] = rnd.nextInt(50000) + 1;
+            data.add(tuple);
+        }
+        dataSize = size;
     }
 
     void insertAllData(int size, boolean sortedPK) {
@@ -102,23 +129,16 @@ public class DAO{
             String sql = "insert into " + tableName + " values (?, ?, ?, ?)";
             ps = conn.prepareStatement(sql); // 批量插入时ps对象必须放到for循环外面
 
-            long startTime = System.currentTimeMillis();
-
-            List pkList = new ArrayList<Integer>();
-            for (int key = 1; key <= size; key++) {
-                pkList.add(key);
-            }
-
             if(!sortedPK) {
                 //shuffle primary key
-                Collections.shuffle(pkList);
+                Collections.shuffle(data);
             }
 
-            for (int key = 1; key <= pkList.size(); key++) {
+            for (int key = 1; key <= data.size(); key++) {
 
-                ps.setInt(1, (int)pkList.get(key - 1));
-                ps.setInt(2, rnd.nextInt(50000) + 1);
-                ps.setInt(3, rnd.nextInt(50000) + 1);
+                ps.setInt(1, data.get(key - 1)[0]);
+                ps.setInt(2, data.get(key - 1)[1]);
+                ps.setInt(3, data.get(key - 1)[2]);
                 //ps.setString(4, RandomStringUtils.randomAlphanumeric(247));
                 ps.setString(4, "");  //this column in database table just for reverse space
                 ps.addBatch();
@@ -143,11 +163,7 @@ public class DAO{
             ps.executeBatch();
             ps.clearBatch();
 
-
-            long endTime = System.currentTimeMillis();
             System.out.println("Data loading finished...");
-
-            System.out.println("Data loading time = " + (endTime - startTime));
 
         } catch (SQLException sqle) {
             System.out.println("Could not create table");
@@ -155,29 +171,70 @@ public class DAO{
         }
     }
 
-    void queryBySecondIdx(String attrA, String attrB) {
+    void loadDataAndQuery(String tableName, String attrA, String attrB, boolean sortedPK) {
         List list = getQueryList(querySize);
-        System.out.println("Query without index:");
+
+        System.out.println();
+        if(sortedPK) System.out.println("Sorted primary key:");
+        else System.out.println("Unsorted primary key:");
+
+        createTable(tableName);
+        long startTime = System.currentTimeMillis();
+        //insert data without secondary index in table
+        insertAllData(dataSize, sortedPK);
+        long endTime = System.currentTimeMillis();
+
+        System.out.println("Data loading time(without index) = " + (endTime - startTime));
         excuteBatchQueries(list);
 
+
+        //insert data with secondary index on columnA in table
+        System.out.println();
+        dropTable(tableName);
+
+        createTable(tableName);
+        startTime = System.currentTimeMillis();
         createIndex(attrA);
+        insertAllData(dataSize, sortedPK);
+        endTime = System.currentTimeMillis();
+
+        System.out.println("Data loading time(with index on ColumnA) = " + (endTime - startTime));
+
         System.out.println("Query with index on column A:");
         excuteBatchQueries(list);
         deleteIndex(attrA);
 
 
+        //insert data with secondary index on columnB in table
+        System.out.println();
+        dropTable(tableName);
+        createTable(tableName);
+        startTime = System.currentTimeMillis();
         createIndex(attrB);
+        insertAllData(dataSize, sortedPK);
+        endTime = System.currentTimeMillis();
+
+        System.out.println("Data loading time(with index on ColumnB) = " + (endTime - startTime));
         System.out.println("Query with index on column B:");
         excuteBatchQueries(list);
         deleteIndex(attrB);
 
 
+        //insert data with secondary index on columnA and columnB in table
+        System.out.println();
+        dropTable(tableName);
+        createTable(tableName);
+        startTime = System.currentTimeMillis();
         createIndex(attrA);
         createIndex(attrB);
+        insertAllData(dataSize, sortedPK);
+        endTime = System.currentTimeMillis();
+
+        System.out.println("Data loading time(with index on ColumnA and ColumnB) = " + (endTime - startTime));
         System.out.println("Query with index on column A and column B:");
         excuteBatchQueries(list);
-        deleteIndex(attrA);
-        deleteIndex(attrB);
+
+        dropTable(tableName);
     }
 
     void excuteBatchQueries(List list) {
